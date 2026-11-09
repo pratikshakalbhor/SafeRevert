@@ -1,0 +1,20 @@
+# Foundry build artifacts
+out/
+cache/
+broadcast/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies / tooling
+node_modules/
+lib/
+
+# Coverage
+coverage/
+lcov.info
+
+# OS
+.DS_Store
