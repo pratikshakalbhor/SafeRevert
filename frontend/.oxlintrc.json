@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "es2023": true
+  },
+  "rules": {
+    "react/set-state-in-effect": "off",
+    "no-undef": "error"
+  }
+}
