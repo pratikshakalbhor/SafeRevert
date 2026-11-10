@@ -11,6 +11,7 @@ SafeRevert/
   script/Deploy.s.sol             # Foundry deploy script
   test/                           # 113 tests (unit, boundary, fuzz, invariant, attack, gas);
                                   # see SECURITY.md for the full validation report
+  frontend/                       # React + TypeScript + Vite + wagmi + viem + RainbowKit dApp
   .github/workflows/test.yml      # CI: forge build + forge test -vvv + coverage + slither
   foundry.toml
   remappings.txt
@@ -69,6 +70,28 @@ createTransfer ──► Pending ── cancel (sender, before unlock) ──►
 - **Fixed payout targets:** `claim` pays the stored `recipient`, `cancel`/`refund` pay
   the stored `sender`. A caller cannot redirect funds.
 - **NatSpec on every external function.**
+
+## Frontend dApp
+
+The frontend for SafeRevert is built with React, TypeScript, Vite, wagmi, viem, RainbowKit, and Tailwind CSS in `frontend/`.
+
+### Quick Start
+
+```bash
+cd frontend
+cp .env.example .env
+# Edit .env with your VITE_VAULT_ADDRESS, VITE_SEPOLIA_RPC_URL, VITE_WALLETCONNECT_PROJECT_ID
+npm install
+npm run dev
+```
+
+### Features
+
+- **Send Escrow:** Create ETH or ERC-20 transfers with delay (5m, 15m, 30m, 1h, or custom up to 24h) and absolute expiry window. Computes high-entropy 32-byte secret in memory. One-time reveal modal upon creation.
+- **My Transfers:** Direct contract reads (`nextId()` + `getTransfer(id)` over the newest 200 ids, multicall in batches of 50) filtered to transfers where you are sender or recipient — no `eth_getLogs`, so strict free-tier RPC log limits can't break the page. Live count-downs to unlock and expiry with dynamic action buttons (Cancel before unlock, Refund after expiry, Claim link).
+- **Claim:** Direct lookup and claim flow. Pre-checks `keccak256(toBytes(secret))` in the browser against on-chain hash commitment before submitting transaction to protect user from failed gas charges.
+- **Safety First:** Secrets are never written to `localStorage`, `sessionStorage`, URL parameters, or console logs. Decodes contract custom errors (`TooEarly`, `Expired`, `InvalidSecret`, etc.) into clear user messages.
+- **Unit Tests:** Vitest test suite for pure crypto and time helpers (`npm test`).
 
 ## Deployment
 
