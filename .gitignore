@@ -1,7 +1,11 @@
-# Foundry build artifacts
-out/
-cache/
-broadcast/
+# Foundry build artifacts (anchored to repo root so they never swallow
+# same-named folders elsewhere, e.g. frontend/src/lib/)
+/out/
+/cache/
+/broadcast/
+
+# Frontend build output
+dist/
 
 # Secrets
 .env
@@ -10,7 +14,7 @@ broadcast/
 
 # Dependencies / tooling
 node_modules/
-lib/
+/lib/
 
 # Coverage
 coverage/
