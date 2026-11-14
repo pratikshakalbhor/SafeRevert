@@ -2,16 +2,32 @@ name: Test
 
 on: [push]
 
+# Pinned dependency versions: used by `forge install` and as the lib/ cache key.
+env:
+  OZ_VERSION: "5.7.0"
+  FORGE_STD_VERSION: "1.17.0"
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Cache lib/
+        id: cache-lib
+        uses: actions/cache@v4
+        with:
+          path: lib
+          key: lib-${{ runner.os }}-oz-${{ env.OZ_VERSION }}-std-${{ env.FORGE_STD_VERSION }}
+
+      - name: Install dependencies
+        if: steps.cache-lib.outputs.cache-hit != 'true'
+        run: |
+          forge install OpenZeppelin/openzeppelin-contracts@v${{ env.OZ_VERSION }} --no-git
+          forge install foundry-rs/forge-std@v${{ env.FORGE_STD_VERSION }} --no-git
 
       - name: Build
         run: forge build --sizes
@@ -23,7 +39,10 @@ jobs:
         run: forge coverage --report summary
 
       - name: Slither
-        uses: crytic/slither-action@v0.1.0
-        with:
-          target: "."
-          filter-paths: "lib|test"
+        run: |
+          if ! command -v slither >/dev/null 2>&1; then
+            python3 -m pip install --user --break-system-packages slither-analyzer \
+              || python3 -m pip install --user slither-analyzer
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+          slither . --filter-paths "lib|test"
