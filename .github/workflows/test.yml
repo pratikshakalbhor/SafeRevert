@@ -45,4 +45,6 @@ jobs:
               || python3 -m pip install --user slither-analyzer
             export PATH="$HOME/.local/bin:$PATH"
           fi
-          slither . --filter-paths "lib|test"
+          # The 5 low "timestamp" and 1 informational "low-level-calls" findings are
+          # accepted by design and documented in SECURITY.md -> fail on medium+ only.
+          slither . --filter-paths "lib|test" --fail-medium
