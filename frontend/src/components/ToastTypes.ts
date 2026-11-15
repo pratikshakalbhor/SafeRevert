@@ -9,6 +9,11 @@ export interface ToastItem {
   message?: string;
   txHash?: string;
   autoClose?: boolean;
+  /**
+   * Optional deduplication key (use the transaction hash). While a toast with
+   * the same key is visible, `addToast` will not stack a second copy.
+   */
+  key?: string;
 }
 
 export interface ToastContextValue {
