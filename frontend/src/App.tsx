@@ -1,23 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { wagmiConfig } from './lib/config';
 import { ToastProvider } from './components/ToastContext';
-import { NetworkBanner } from './components/NetworkBanner';
-import { Navbar, type NavTab } from './components/Navbar';
-import { SendPage } from './pages/SendPage';
-import { TransfersPage } from './pages/TransfersPage';
-import { ClaimPage } from './pages/ClaimPage';
-import { useTransfers } from './hooks/useTransfers';
 import { useConnectErrorToast } from './hooks/useConnectErrorToast';
-import { ConnectHelpHint } from './components/ConnectHelpHint';
-import {
-  pageVariants,
-  pageVariantsReduced,
-  pickVariants,
-} from './lib/motion';
+import { AppRoutes } from './routes';
+import { AlertTriangle } from 'lucide-react';
 
 const queryClient = new QueryClient();
 
@@ -54,25 +43,28 @@ class ErrorBoundary extends React.Component<
       return (
         <div
           role="alert"
-          className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-100 px-6 text-center"
+          className="min-h-screen flex flex-col items-center justify-center sr-bg px-6 text-center"
         >
-          <div className="max-w-md w-full bg-slate-900 border border-slate-700 rounded-2xl p-8 shadow-2xl space-y-4">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-2xl">
-              !
+          <div className="max-w-md w-full glass-card p-8 space-y-4">
+            <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center alert-warning">
+              <AlertTriangle className="w-6 h-6" />
             </div>
-            <h1 className="text-xl font-bold text-white">Something went wrong</h1>
-            <p className="text-sm text-slate-400 leading-relaxed">
+            <h1 className="text-xl font-serif font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
+              Something went wrong
+            </h1>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--silver-blue)' }}>
               The app hit an unexpected error and could not continue. Your wallet
               and funds are unaffected — nothing was sent.
             </p>
             {this.state.error && (
-              <p className="text-[11px] font-mono text-slate-500 break-all text-left bg-slate-950 border border-slate-800 rounded-lg p-2.5">
+              <p className="text-[11px] font-mono break-all text-left p-2.5 rounded-lg"
+                style={{ background: 'rgba(10,15,30,0.8)', border: '1px solid rgba(143,163,199,0.16)', color: 'rgba(143,163,199,0.7)' }}>
                 {this.state.error.message}
               </p>
             )}
             <button
               onClick={this.handleReload}
-              className="w-full py-3 rounded-xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              className="btn-primary w-full py-3 text-sm"
             >
               Reload the app
             </button>
@@ -84,117 +76,13 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+/**
+ * Thin bridge: subscribes to wallet-connect failures and renders the route
+ * table. Layout, navbar, banner and footer live in AppLayout.
+ */
 const MainContent: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<NavTab>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('id')) return 'claim';
-    }
-    return 'send';
-  });
-
-  const [claimTransferId, setClaimTransferId] = useState<bigint | null>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const idParam = params.get('id');
-      if (idParam) {
-        const parsed = parseInt(idParam, 10);
-        if (!isNaN(parsed) && parsed >= 0) {
-          return BigInt(parsed);
-        }
-      }
-    }
-    return null;
-  });
-
-  // Hook into transfers count
-  const { transfers } = useTransfers();
-
-  // Surface wagmi connect failures (pending request, rejection, missing
-  // connector) as readable toasts instead of failing silently.
   useConnectErrorToast();
-
-  const reduced = useReducedMotion() ?? false;
-  const variants = pickVariants(reduced, pageVariants, pageVariantsReduced);
-
-  const handleNavigateToClaim = (id: bigint) => {
-    setClaimTransferId(id);
-    setActiveTab('claim');
-  };
-
-  const handleTransferCreated = (_id: bigint) => {
-    // Keep user on Send page so they can copy and review the secret in the one-time modal
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Network & Configuration Banner */}
-      <NetworkBanner />
-
-      {/* Troubleshooting hint shown while the Connect Wallet modal is open */}
-      <ConnectHelpHint />
-
-      {/* Navigation Bar */}
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        myTransfersCount={transfers.length}
-      />
-
-      {/* Main Page Body */}
-      <main className="flex-1 w-full pb-16 overflow-x-hidden">
-        <AnimatePresence mode="wait" initial={false}>
-          {activeTab === 'send' && (
-            <motion.div
-              key="send"
-              variants={variants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <SendPage onTransferCreated={handleTransferCreated} />
-            </motion.div>
-          )}
-
-          {activeTab === 'transfers' && (
-            <motion.div
-              key="transfers"
-              variants={variants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <TransfersPage onNavigateToClaim={handleNavigateToClaim} />
-            </motion.div>
-          )}
-
-          {activeTab === 'claim' && (
-            <motion.div
-              key="claim"
-              variants={variants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
-              <ClaimPage initialTransferId={claimTransferId} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/60 py-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>
-            SafeRevert &middot; Time-Locked Transfer Escrow on Ethereum Sepolia
-          </p>
-          <p className="text-[11px] text-slate-600">
-            Never stores private keys or secrets. Secret strings live only in component memory.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
+  return <AppRoutes />;
 };
 
 export default function App() {
@@ -204,10 +92,11 @@ export default function App() {
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider
             theme={darkTheme({
-              accentColor: '#4f46e5',
-              accentColorForeground: 'white',
+              accentColor: '#E8743B',
+              accentColorForeground: '#0A0F1E',
               borderRadius: 'medium',
               fontStack: 'system',
+              overlayBlur: 'small',
             })}
           >
             <ToastProvider>
