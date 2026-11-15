@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   useAccount,
   useReadContract,
@@ -41,6 +41,22 @@ import {
 interface ClaimPageProps {
   initialTransferId?: bigint | null;
 }
+
+// A small labelled detail cell used in the info grid
+const DetailCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div
+    className="p-3.5 rounded-xl text-xs"
+    style={{ background: 'rgba(10,15,30,0.5)', border: '1px solid rgba(143,163,199,0.14)' }}
+  >
+    <span
+      className="uppercase text-[10px] font-semibold block mb-0.5"
+      style={{ color: 'var(--silver-blue)' }}
+    >
+      {label}
+    </span>
+    {children}
+  </div>
+);
 
 export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
   const { address: userAddress, isConnected } = useAccount();
@@ -179,28 +195,41 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
     hash: claimTxHash,
   });
 
+  // --- Once-per-transaction guards & latest-value refs -----------------------
+  const refetchTransferRef = useRef(refetchTransfer);
   useEffect(() => {
-    if (isClaimSuccess) {
-      addToast({
-        type: 'success',
-        title: 'Transfer Claimed Successfully!',
-        message: 'Funds have been paid out to your recipient wallet.',
-        txHash: claimTxHash,
-      });
-      // Clear secret input immediately
-      setSecretInput('');
-      refetchTransfer();
-    }
-  }, [isClaimSuccess, claimTxHash, addToast, refetchTransfer]);
+    refetchTransferRef.current = refetchTransfer;
+  });
+  const handledClaimTxRef = useRef<string | null>(null);
+  const handledClaimErrorRef = useRef<unknown>(null);
 
   useEffect(() => {
-    if (claimError) {
-      addToast({
-        type: 'error',
-        title: 'Claim Failed',
-        message: decodeContractError(claimError),
-      });
-    }
+    if (!isClaimSuccess || !claimTxHash) return;
+    // Exactly once per transaction hash
+    if (handledClaimTxRef.current === claimTxHash) return;
+    handledClaimTxRef.current = claimTxHash;
+
+    addToast({
+      type: 'success',
+      title: 'Transfer Claimed Successfully!',
+      message: 'Funds have been paid out to your recipient wallet.',
+      txHash: claimTxHash,
+      key: claimTxHash,
+    });
+    // Clear secret input immediately
+    setSecretInput('');
+    refetchTransferRef.current();
+  }, [isClaimSuccess, claimTxHash, addToast]);
+
+  useEffect(() => {
+    if (!claimError || handledClaimErrorRef.current === claimError) return;
+    handledClaimErrorRef.current = claimError;
+
+    addToast({
+      type: 'error',
+      title: 'Claim Failed',
+      message: decodeContractError(claimError),
+    });
   }, [claimError, addToast]);
 
   const handleLookup = (e: React.FormEvent) => {
@@ -228,26 +257,37 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
       {/* Title */}
-      <div className="text-center">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight sm:text-4xl">
+      <div className="text-center space-y-2">
+        <h1
+          className="font-serif text-3xl sm:text-4xl font-bold tracking-tight"
+          style={{ color: 'rgba(255,255,255,0.92)' }}
+        >
           Claim Escrow Transfer
         </h1>
-        <p className="mt-2 text-sm text-slate-400 max-w-md mx-auto">
+        <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--silver-blue)' }}>
           Claim time-locked funds sent to your address. Provide your transfer ID and claim secret.
         </p>
       </div>
 
       {/* Transfer Lookup Card */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+      <div className="glass-card p-6">
         <form onSubmit={handleLookup} className="space-y-4">
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+          <label
+            className="block text-xs font-semibold uppercase tracking-wider"
+            style={{ color: 'rgba(255,255,255,0.7)' }}
+          >
             Transfer Identifier
           </label>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <span className="absolute left-3.5 top-2.5 text-slate-500 font-mono text-sm">#</span>
+              <span
+                className="absolute left-3.5 top-2.5 font-mono text-sm"
+                style={{ color: 'rgba(143,163,199,0.4)' }}
+              >
+                #
+              </span>
               <input
                 type="number"
                 min="0"
@@ -255,13 +295,13 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
                 placeholder="e.g. 0, 1, 2..."
                 value={idInput}
                 onChange={(e) => setIdInput(e.target.value)}
-                className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-100 placeholder-slate-500 font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition"
+                className="sr-input font-mono pl-8"
               />
             </div>
             <button
               type="submit"
               disabled={!idInput.trim()}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition disabled:opacity-40"
+              className="btn-primary px-5 py-2.5 text-xs flex items-center gap-1.5"
             >
               <Search className="w-3.5 h-3.5" />
               Lookup
@@ -272,18 +312,23 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
 
       {/* Loading state for lookup */}
       {isReadingTransfer && (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-          <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+        <div
+          className="glass-card p-8 text-center text-xs flex items-center justify-center gap-2"
+          style={{ color: 'var(--silver-blue)' }}
+        >
+          <RefreshCw className="w-4 h-4 animate-spin" style={{ color: 'var(--copper)' }} />
           Reading transfer data from Sepolia...
         </div>
       )}
 
       {/* Not Found State */}
       {!isReadingTransfer && readError && activeId !== null && (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center space-y-2">
-          <XCircle className="w-8 h-8 text-rose-400 mx-auto" />
-          <h3 className="text-sm font-bold text-slate-200">Transfer #{activeId.toString()} Not Found</h3>
-          <p className="text-xs text-slate-400">
+        <div className="glass-card p-8 text-center space-y-2">
+          <XCircle className="w-8 h-8 mx-auto" style={{ color: 'var(--copper)' }} />
+          <h3 className="text-sm font-serif font-bold" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            Transfer #{activeId.toString()} Not Found
+          </h3>
+          <p className="text-xs" style={{ color: 'var(--silver-blue)' }}>
             This transfer ID does not exist in the vault contract on Sepolia.
           </p>
         </div>
@@ -291,113 +336,153 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
 
       {/* Transfer Information & Claim Form */}
       {transfer && !isReadingTransfer && (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+        <div className="glass-card p-6 space-y-6">
           {/* Header & Status */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 pb-4"
+            style={{ borderBottom: '1px solid rgba(143,163,199,0.1)' }}
+          >
             <div>
-              <span className="text-xs text-slate-400">Transfer Identifier</span>
-              <h2 className="text-xl font-mono font-bold text-white">
+              <span className="text-xs" style={{ color: 'var(--silver-blue)' }}>
+                Transfer Identifier
+              </span>
+              <h2 className="text-xl font-mono font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
                 #{transfer.id.toString()}
               </h2>
             </div>
 
             {/* Lifecycle badge */}
             <div>
-              {transfer.state === TransferState.Pending && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              {transfer.state === TransferState.Pending && isBeforeUnlock && (
+                <span className="badge-pending">
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{ background: 'var(--silver-blue)', animation: 'pulse 2s infinite' }}
+                  />
                   Pending
                 </span>
               )}
+              {transfer.state === TransferState.Pending && isInClaimWindow && (
+                <span className="badge-claimable">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Claimable
+                </span>
+              )}
               {transfer.state === TransferState.Claimed && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  <CheckCircle2 className="w-4 h-4" /> Claimed
+                <span className="badge-claimed">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Claimed
                 </span>
               )}
               {transfer.state === TransferState.Cancelled && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                  Cancelled
-                </span>
+                <span className="badge-cancelled">Cancelled</span>
               )}
               {transfer.state === TransferState.Refunded && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                  Refunded
-                </span>
+                <span className="badge-refunded">Refunded</span>
               )}
             </div>
           </div>
 
           {/* Details Overview */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
-              <span className="text-slate-400 uppercase text-[10px] font-semibold">Amount to Claim</span>
-              <p className="text-xl font-extrabold text-emerald-400 mt-0.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <DetailCell label="Amount to Claim">
+              <p
+                className="text-xl font-semibold font-tabular mt-0.5"
+                style={{ color: 'var(--copper)' }}
+              >
                 {formatUnits(transfer.amount, transfer.tokenDecimals ?? 18)}{' '}
-                <span className="text-sm font-semibold text-white">
+                <span className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
                   {transfer.tokenSymbol}
                 </span>
               </p>
-            </div>
+            </DetailCell>
 
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
-              <span className="text-slate-400 uppercase text-[10px] font-semibold">Sender (Funder)</span>
-              <p className="font-mono text-slate-300 mt-1 truncate" title={transfer.sender}>
+            <DetailCell label="Sender (Funder)">
+              <p
+                className="font-mono mt-1 truncate text-xs"
+                style={{ color: 'rgba(143,163,199,0.8)' }}
+                title={transfer.sender}
+              >
                 {transfer.sender}
               </p>
-            </div>
+            </DetailCell>
           </div>
 
           {/* Recipient Check Banner */}
-          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1">
-            <span className="text-slate-400 uppercase text-[10px] font-semibold">Designated Recipient</span>
-            <p className="font-mono text-slate-200 truncate" title={transfer.recipient}>
+          <DetailCell label="Designated Recipient">
+            <p
+              className="font-mono truncate text-xs mb-1"
+              style={{ color: 'rgba(255,255,255,0.85)' }}
+              title={transfer.recipient}
+            >
               {transfer.recipient}
             </p>
             {isConnected && (
               <div className="pt-1.5 flex items-center gap-1.5">
                 {isRecipientConnected ? (
-                  <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                  <span
+                    className="flex items-center gap-1 text-xs font-semibold"
+                    style={{ color: 'var(--copper)' }}
+                  >
                     <CheckCircle2 className="w-3.5 h-3.5" /> Connected wallet matches recipient
                   </span>
                 ) : (
-                  <span className="text-rose-400 flex items-center gap-1 font-semibold">
+                  <span
+                    className="flex items-center gap-1 text-xs font-semibold"
+                    style={{ color: 'rgba(232,116,59,0.7)' }}
+                  >
                     <XCircle className="w-3.5 h-3.5" /> Connected wallet is NOT the recipient
                   </span>
                 )}
               </div>
             )}
-          </div>
+          </DetailCell>
 
           {/* Time Window Status */}
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
-            <div className="flex items-center gap-1.5 font-semibold text-slate-300">
-              <Clock className="w-4 h-4 text-indigo-400" />
+          <div
+            className="p-4 rounded-xl text-xs space-y-3"
+            style={{ background: 'rgba(10,15,30,0.5)', border: '1px solid rgba(143,163,199,0.14)' }}
+          >
+            <div
+              className="flex items-center gap-1.5 font-semibold"
+              style={{ color: 'rgba(255,255,255,0.8)' }}
+            >
+              <Clock className="w-4 h-4" style={{ color: 'var(--silver-blue)' }} />
               <span>Claim Window Schedule</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-800/80">
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1"
+              style={{ borderTop: '1px solid rgba(143,163,199,0.08)' }}
+            >
               <div>
-                <span className="text-slate-400">Unlock Time (Claim opens):</span>
-                <p className="font-mono text-slate-200 mt-0.5">{formatLocalTimestamp(unlockTs)}</p>
+                <span style={{ color: 'var(--silver-blue)' }}>Unlock Time (Claim opens):</span>
+                <p className="font-mono mt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  {formatLocalTimestamp(unlockTs)}
+                </p>
                 {isBeforeUnlock && (
-                  <p className="text-indigo-400 font-semibold mt-1">
+                  <p className="font-semibold mt-1" style={{ color: 'var(--silver-blue)' }}>
                     🔒 Locked (opens in {unlockCountdown.formatted})
                   </p>
                 )}
               </div>
 
               <div>
-                <span className="text-slate-400">Expiry Time (Refund opens):</span>
-                <p className="font-mono text-slate-200 mt-0.5">{formatLocalTimestamp(expiryTs)}</p>
+                <span style={{ color: 'var(--silver-blue)' }}>Expiry Time (Refund opens):</span>
+                <p className="font-mono mt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                  {formatLocalTimestamp(expiryTs)}
+                </p>
                 {isInClaimWindow && (
-                  <p className="text-emerald-400 font-semibold mt-1 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  <p className="font-semibold mt-1 flex items-center gap-1" style={{ color: 'var(--copper)' }}>
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ background: 'var(--copper)', animation: 'ping 1s cubic-bezier(0,0,0.2,1) infinite' }}
+                    />
                     Window OPEN (Expires in {expiryCountdown.formatted})
                   </p>
                 )}
                 {isAfterExpiry && (
-                  <p className="text-rose-400 font-semibold mt-1">
-                    🔴 Expired (Window closed)
+                  <p className="font-semibold mt-1 flex items-center gap-1" style={{ color: 'rgba(232,116,59,0.6)' }}>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Expired (Window closed)
                   </p>
                 )}
               </div>
@@ -405,26 +490,39 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
           </div>
 
           {/* Secret Input & Pre-Verification */}
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+          <div
+            className="p-4 rounded-xl space-y-3"
+            style={{ background: 'rgba(10,15,30,0.5)', border: '1px solid rgba(143,163,199,0.14)' }}
+          >
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+              <label
+                className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5"
+                style={{ color: 'rgba(255,255,255,0.8)' }}
+              >
+                <KeyRound className="w-3.5 h-3.5" style={{ color: 'var(--silver-blue)' }} />
                 Claim Secret
               </label>
               {isNoSecretRequired && (
-                <span className="text-[11px] font-semibold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                <span
+                  className="text-[11px] font-semibold px-2 py-0.5 rounded"
+                  style={{
+                    color: 'var(--silver-blue)',
+                    background: 'rgba(143,163,199,0.08)',
+                    border: '1px solid rgba(143,163,199,0.16)',
+                  }}
+                >
                   No Secret Required
                 </span>
               )}
             </div>
 
             {isNoSecretRequired ? (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs" style={{ color: 'var(--silver-blue)' }}>
                 This transfer was created with zero hash check. Any claim call from the recipient wallet will succeed without a secret.
               </p>
             ) : (
               <div className="space-y-2">
-                <p className="text-[11px] text-slate-400 leading-relaxed">
+                <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(143,163,199,0.75)' }}>
                   Enter the secret provided to you by the sender. The app verifies the hash in the browser before sending any transaction so you won't waste gas if the secret is wrong.
                 </p>
 
@@ -434,13 +532,14 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
                     placeholder="Paste the 64-character secret..."
                     value={secretInput}
                     onChange={(e) => setSecretInput(e.target.value)}
-                    className="w-full pl-3 pr-20 py-2 rounded-xl bg-slate-900 border border-slate-700 font-mono text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="sr-input font-mono text-xs pl-3 pr-20"
                   />
                   <div className="absolute right-2 top-1.5 flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setShowSecret(!showSecret)}
-                      className="p-1 text-slate-400 hover:text-white"
+                      className="p-1 rounded transition-colors"
+                      style={{ color: 'rgba(143,163,199,0.5)' }}
                       title={showSecret ? 'Hide secret' : 'Show secret'}
                     >
                       {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -455,7 +554,8 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
                           // clipboard read denied
                         }
                       }}
-                      className="p-1 text-indigo-400 hover:text-indigo-300"
+                      className="p-1 rounded transition-colors"
+                      style={{ color: 'var(--copper)' }}
                       title="Paste from clipboard"
                     >
                       <ClipboardPaste className="w-3.5 h-3.5" />
@@ -466,23 +566,31 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
                 {/* Pre-check status feedback */}
                 {secretInput.trim() ? (
                   secretMatches ? (
-                    <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 flex items-center gap-2 text-xs text-emerald-300">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div
+                      className="p-2.5 rounded-lg flex items-center gap-2 text-xs"
+                      style={{
+                        background: 'rgba(232,116,59,0.07)',
+                        border: '1px solid rgba(232,116,59,0.25)',
+                        color: 'var(--copper)',
+                      }}
+                    >
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
                       <span>
                         <strong>Secret verified!</strong> The hash matches the on-chain commitment.
                       </span>
                     </div>
                   ) : (
-                    <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-500/50 flex items-center gap-2 text-xs text-rose-300">
-                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <div className="alert-warning p-2.5 flex items-center gap-2 text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
                       <span>
                         <strong>Invalid Secret:</strong> Does not match on-chain hash! Submitting now would revert and waste gas.
                       </span>
                     </div>
                   )
                 ) : (
-                  <p className="text-[10px] text-slate-500">
-                    On-chain commitment: <span className="font-mono">{transfer.secretHash}</span>
+                  <p className="text-[10px]" style={{ color: 'rgba(143,163,199,0.4)' }}>
+                    On-chain commitment:{' '}
+                    <span className="font-mono">{transfer.secretHash}</span>
                   </p>
                 )}
               </div>
@@ -492,23 +600,46 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
           {/* Claim Action Button */}
           <div>
             {!isConnected ? (
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-400">
+              <div
+                className="p-3 rounded-xl text-center text-xs"
+                style={{
+                  background: 'rgba(10,15,30,0.5)',
+                  border: '1px solid rgba(143,163,199,0.14)',
+                  color: 'var(--silver-blue)',
+                }}
+              >
                 Please connect your recipient wallet to claim this transfer.
               </div>
             ) : !isRecipientConnected ? (
-              <div className="p-3 bg-rose-950/30 border border-rose-800/40 rounded-xl text-center text-xs text-rose-300">
+              <div className="alert-warning p-3 text-center text-xs flex items-center justify-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
                 Switch wallet: Your connected address is not the designated recipient of this transfer.
               </div>
             ) : transfer.state !== TransferState.Pending ? (
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-400">
+              <div
+                className="p-3 rounded-xl text-center text-xs"
+                style={{
+                  background: 'rgba(10,15,30,0.5)',
+                  border: '1px solid rgba(143,163,199,0.14)',
+                  color: 'var(--silver-blue)',
+                }}
+              >
                 This transfer is not pending (currently: {STATE_LABELS[transfer.state]}).
               </div>
             ) : isBeforeUnlock ? (
-              <div className="p-3 bg-indigo-950/40 border border-indigo-700/40 rounded-xl text-center text-xs text-indigo-300">
+              <div
+                className="p-3 rounded-xl text-center text-xs"
+                style={{
+                  background: 'rgba(143,163,199,0.05)',
+                  border: '1px solid rgba(143,163,199,0.16)',
+                  color: 'var(--silver-blue)',
+                }}
+              >
                 Claim window opens at {formatLocalTimestamp(unlockTs)} (countdown still active).
               </div>
             ) : isAfterExpiry ? (
-              <div className="p-3 bg-rose-950/40 border border-rose-800/40 rounded-xl text-center text-xs text-rose-300">
+              <div className="alert-warning p-3 text-center text-xs flex items-center justify-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
                 Claim window closed at {formatLocalTimestamp(expiryTs)}. Funds can now only be refunded by the sender.
               </div>
             ) : (
@@ -516,10 +647,10 @@ export const ClaimPage: React.FC<ClaimPageProps> = ({ initialTransferId }) => {
                 type="button"
                 onClick={handleClaimSubmit}
                 disabled={!canClaim || isClaimPending || isClaimWaiting}
-                className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                className="btn-primary w-full py-3.5 px-4 text-sm flex items-center justify-center gap-2"
               >
                 {(isClaimPending || isClaimWaiting) && (
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                  <RefreshCw className="w-4 h-4 animate-spin" />
                 )}
                 {isClaimPending
                   ? 'Confirm Claim in Wallet...'

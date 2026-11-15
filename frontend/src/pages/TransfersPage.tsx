@@ -1,21 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   useAccount,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi';
 import { formatUnits } from 'viem';
+import { Link } from 'react-router-dom';
 import {
   RefreshCw,
   Clock,
   ArrowUpRight,
   ArrowDownLeft,
   CheckCircle2,
-  AlertCircle,
+  AlertTriangle,
   KeyRound,
   RotateCcw,
   Ban,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { safeRevertVaultAbi } from '../lib/abi';
@@ -26,6 +28,7 @@ import {
 } from '../lib/types';
 import { useTransfers } from '../hooks/useTransfers';
 import { useToast } from '../hooks/useToast';
+import { CopyButton } from '../components/CopyButton';
 import { decodeContractError } from '../lib/errors';
 import {
   formatLocalTimestamp,
@@ -105,38 +108,51 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
     hash: actionTxHash,
   });
 
+  // --- Once-per-transaction guards & latest-value refs -----------------------
+  const refetchRef = useRef(refetch);
   useEffect(() => {
-    if (isActionSuccess) {
-      addToast({
-        type: 'success',
-        title: 'Transaction Confirmed',
-        message: 'The transfer status has been updated on-chain.',
-        txHash: actionTxHash,
-      });
-      // Show checkmark for the affected transfer
-      if (actionVariables?.args?.[0] !== undefined) {
-        const idStr = String(actionVariables.args[0]);
-        setSuccessIds((prev) => new Set([...prev, idStr]));
-        setTimeout(() => {
-          setSuccessIds((prev) => {
-            const next = new Set(prev);
-            next.delete(idStr);
-            return next;
-          });
-        }, 2500);
-      }
-      refetch();
-    }
-  }, [isActionSuccess, actionTxHash, actionVariables, addToast, refetch]);
+    refetchRef.current = refetch;
+  });
+  const handledActionTxRef = useRef<string | null>(null);
+  const handledActionErrorRef = useRef<unknown>(null);
 
   useEffect(() => {
-    if (actionError) {
-      addToast({
-        type: 'error',
-        title: 'Action Failed',
-        message: decodeContractError(actionError),
-      });
+    if (!isActionSuccess || !actionTxHash) return;
+    // Exactly once per transaction hash
+    if (handledActionTxRef.current === actionTxHash) return;
+    handledActionTxRef.current = actionTxHash;
+
+    addToast({
+      type: 'success',
+      title: 'Transaction Confirmed',
+      message: 'The transfer status has been updated on-chain.',
+      txHash: actionTxHash,
+      key: actionTxHash,
+    });
+    // Show checkmark for the affected transfer
+    if (actionVariables?.args?.[0] !== undefined) {
+      const idStr = String(actionVariables.args[0]);
+      setSuccessIds((prev) => new Set([...prev, idStr]));
+      setTimeout(() => {
+        setSuccessIds((prev) => {
+          const next = new Set(prev);
+          next.delete(idStr);
+          return next;
+        });
+      }, 2500);
     }
+    refetchRef.current();
+  }, [isActionSuccess, actionTxHash, actionVariables, addToast]);
+
+  useEffect(() => {
+    if (!actionError || handledActionErrorRef.current === actionError) return;
+    handledActionErrorRef.current = actionError;
+
+    addToast({
+      type: 'error',
+      title: 'Action Failed',
+      message: decodeContractError(actionError),
+    });
   }, [actionError, addToast]);
 
   const handleCancel = (id: bigint) => {
@@ -170,15 +186,23 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
     return isSender || isRecipient;
   });
 
+  const filterBtnStyle = (active: boolean) =>
+    active
+      ? { color: 'var(--copper)', background: 'rgba(232,116,59,0.1)', border: '1px solid rgba(232,116,59,0.28)' }
+      : { color: 'rgba(143,163,199,0.65)', background: 'transparent', border: '1px solid transparent' };
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-4xl mx-auto px-4 py-10">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h1
+            className="font-serif text-3xl sm:text-4xl font-bold tracking-tight"
+            style={{ color: 'rgba(255,255,255,0.92)' }}
+          >
             My Transfers
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+          <p className="text-sm mt-1" style={{ color: 'var(--silver-blue)' }}>
             Track outgoing and incoming time-locked escrows. Reverse or refund when allowed.
           </p>
         </div>
@@ -186,7 +210,7 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
         <button
           onClick={() => refetch()}
           disabled={isLoading}
-          className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white hover:border-slate-700 transition"
+          className="btn-secondary self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
@@ -194,66 +218,61 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 mb-6 border-b border-slate-800/80 pb-3">
-        <button
-          onClick={() => setActiveFilter('all')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-            activeFilter === 'all'
-              ? 'bg-indigo-600 text-white'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          All Transfers ({transfers.length})
-        </button>
-        <button
-          onClick={() => setActiveFilter('sent')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-            activeFilter === 'sent'
-              ? 'bg-indigo-600 text-white'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          Sent (Outgoing)
-        </button>
-        <button
-          onClick={() => setActiveFilter('received')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-            activeFilter === 'received'
-              ? 'bg-indigo-600 text-white'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          Received (Incoming)
-        </button>
+      <div
+        className="flex items-center gap-2 mb-6 pb-3"
+        style={{ borderBottom: '1px solid rgba(143,163,199,0.1)' }}
+      >
+        {(['all', 'sent', 'received'] as const).map((f) => {
+          const labels = {
+            all: `All Transfers (${transfers.length})`,
+            sent: 'Sent (Outgoing)',
+            received: 'Received (Incoming)',
+          };
+          return (
+            <button
+              key={f}
+              onClick={() => setActiveFilter(f)}
+              className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200"
+              style={filterBtnStyle(activeFilter === f)}
+            >
+              {labels[f]}
+            </button>
+          );
+        })}
       </div>
 
       {/* Wallet Not Connected State */}
       {!isConnected && (
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-10 text-center space-y-3">
-          <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto border border-indigo-500/20">
-            <ShieldCheck className="w-6 h-6" />
+        <div className="glass-card p-10 text-center space-y-3">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto"
+            style={{ background: 'rgba(232,116,59,0.08)', border: '1px solid rgba(232,116,59,0.2)' }}
+          >
+            <ShieldCheck className="w-6 h-6" style={{ color: 'var(--copper)' }} />
           </div>
-          <h3 className="text-base font-bold text-white">Connect Wallet</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <h3 className="text-base font-serif font-bold" style={{ color: 'rgba(255,255,255,0.92)' }}>
+            Connect Wallet
+          </h3>
+          <p className="text-xs max-w-sm mx-auto" style={{ color: 'var(--silver-blue)' }}>
             Please connect your wallet to view your sent and received SafeRevert escrow transfers.
           </p>
         </div>
       )}
 
-      {/* Loading Skeleton — animate-pulse via Tailwind */}
+      {/* Loading Skeleton */}
       {isConnected && isLoading && transfers.length === 0 && (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 animate-pulse space-y-3"
+              className="glass-card p-5 animate-pulse space-y-3"
             >
               <div className="flex items-center justify-between">
-                <div className="h-5 bg-slate-800 rounded w-1/4" />
-                <div className="h-5 bg-slate-800 rounded w-16" />
+                <div className="h-5 rounded w-1/4" style={{ background: 'rgba(143,163,199,0.1)' }} />
+                <div className="h-5 rounded w-16" style={{ background: 'rgba(143,163,199,0.1)' }} />
               </div>
-              <div className="h-4 bg-slate-800/60 rounded w-1/2" />
-              <div className="h-8 bg-slate-800/40 rounded w-full" />
+              <div className="h-4 rounded w-1/2" style={{ background: 'rgba(143,163,199,0.07)' }} />
+              <div className="h-8 rounded w-full" style={{ background: 'rgba(143,163,199,0.05)' }} />
             </div>
           ))}
         </div>
@@ -261,13 +280,17 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
 
       {/* Error State */}
       {isConnected && error && transfers.length === 0 && (
-        <div className="bg-rose-950/40 border border-rose-500/40 rounded-2xl p-6 text-center space-y-2">
-          <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
-          <h4 className="text-sm font-bold text-rose-200">Unable to load transfers</h4>
-          <p className="text-xs text-rose-300 max-w-md mx-auto">{error}</p>
+        <div className="glass-card p-6 text-center space-y-2 alert-warning">
+          <AlertTriangle className="w-8 h-8 mx-auto" style={{ color: 'var(--copper)' }} />
+          <h4 className="text-sm font-bold" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            Unable to load transfers
+          </h4>
+          <p className="text-xs max-w-md mx-auto" style={{ color: 'var(--copper)' }}>
+            {error}
+          </p>
           <button
             onClick={() => refetch()}
-            className="mt-3 px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold"
+            className="btn-destructive mt-3 px-4 py-1.5 text-xs font-semibold"
           >
             Retry
           </button>
@@ -276,12 +299,17 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
 
       {/* Empty State */}
       {isConnected && !isLoading && filteredTransfers.length === 0 && (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
-          <div className="w-12 h-12 bg-slate-800/80 text-slate-400 rounded-2xl flex items-center justify-center mx-auto">
-            <Clock className="w-6 h-6" />
+        <div className="glass-card p-12 text-center space-y-3">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto"
+            style={{ background: 'rgba(143,163,199,0.07)', border: '1px solid rgba(143,163,199,0.14)' }}
+          >
+            <Clock className="w-6 h-6" style={{ color: 'var(--silver-blue)' }} />
           </div>
-          <h3 className="text-base font-bold text-slate-200">No Transfers Found</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          <h3 className="text-base font-serif font-bold" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            No Transfers Found
+          </h3>
+          <p className="text-xs max-w-sm mx-auto" style={{ color: 'var(--silver-blue)' }}>
             {activeFilter === 'sent'
               ? 'You have not sent any transfers yet.'
               : activeFilter === 'received'
@@ -336,24 +364,55 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                   key={idStr}
                   variants={itemVariants}
                   layout
-                  className="bg-slate-900/90 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg transition-colors space-y-4"
+                  className="glass-card p-5 space-y-4 transition-all duration-200"
+                  style={{ '--hover-border': 'rgba(143,163,199,0.28)' } as React.CSSProperties}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(143,163,199,0.28)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(143,163,199,0.16)';
+                  }}
                 >
                   {/* Top Row: ID, Direction, Status Badge */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-bold text-white bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 pb-3"
+                    style={{ borderBottom: '1px solid rgba(143,163,199,0.1)' }}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="font-mono text-sm font-bold px-2.5 py-1 rounded-lg"
+                        style={{
+                          color: 'rgba(255,255,255,0.92)',
+                          background: 'rgba(10,15,30,0.6)',
+                          border: '1px solid rgba(143,163,199,0.14)',
+                        }}
+                      >
                         #{idStr}
                       </span>
 
                       {isSender && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20">
-                          <ArrowUpRight className="w-3 h-3" /> Sent (Outgoing)
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded"
+                          style={{
+                            background: 'rgba(143,163,199,0.08)',
+                            color: 'var(--silver-blue)',
+                            border: '1px solid rgba(143,163,199,0.18)',
+                          }}
+                        >
+                          <ArrowUpRight className="w-3 h-3" /> Sent
                         </span>
                       )}
 
                       {isRecipient && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20">
-                          <ArrowDownLeft className="w-3 h-3" /> Received (Incoming)
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded"
+                          style={{
+                            background: 'rgba(232,116,59,0.08)',
+                            color: 'var(--copper)',
+                            border: '1px solid rgba(232,116,59,0.2)',
+                          }}
+                        >
+                          <ArrowDownLeft className="w-3 h-3" /> Received
                         </span>
                       )}
                     </div>
@@ -368,7 +427,8 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                             initial="hidden"
                             animate="visible"
                             exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"
+                            className="inline-flex items-center gap-1 text-xs font-semibold"
+                            style={{ color: 'var(--copper)' }}
                           >
                             <CheckCircle2 className="w-4 h-4" />
                             Done!
@@ -378,17 +438,45 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
 
                       {/* Lifecycle State Badge — cross-fades on key change */}
                       <AnimatePresence mode="wait">
-                        {isPending && (
+                        {isPending && isBeforeUnlock && (
                           <motion.span
                             key="pending"
                             variants={statusBadgeVariants}
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                            className="badge-pending"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            <span
+                              className="w-1.5 h-1.5 rounded-full"
+                              style={{ background: 'var(--silver-blue)', animation: 'pulse 2s infinite' }}
+                            />
                             Pending
+                          </motion.span>
+                        )}
+                        {isPending && isInClaimWindow && (
+                          <motion.span
+                            key="claimable"
+                            variants={statusBadgeVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            className="badge-claimable"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                            Claimable
+                          </motion.span>
+                        )}
+                        {isPending && isAfterExpiry && (
+                          <motion.span
+                            key="expired"
+                            variants={statusBadgeVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            className="badge-cancelled"
+                          >
+                            Expired
                           </motion.span>
                         )}
                         {isClaimed && (
@@ -398,7 +486,7 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                            className="badge-claimed"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" /> Claimed
                           </motion.span>
@@ -410,7 +498,7 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700"
+                            className="badge-cancelled"
                           >
                             <Ban className="w-3.5 h-3.5" /> Cancelled
                           </motion.span>
@@ -422,7 +510,7 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                             initial="hidden"
                             animate="visible"
                             exit="exit"
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/30"
+                            className="badge-refunded"
                           >
                             <RotateCcw className="w-3.5 h-3.5" /> Refunded
                           </motion.span>
@@ -435,10 +523,18 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                     {/* Amount & Asset */}
                     <div>
-                      <span className="text-slate-400 uppercase text-[10px] font-semibold">Amount</span>
-                      <p className="text-base font-bold text-white mt-0.5">
+                      <span
+                        className="uppercase text-[10px] font-semibold"
+                        style={{ color: 'var(--silver-blue)' }}
+                      >
+                        Amount
+                      </span>
+                      <p
+                        className="text-base font-bold mt-0.5 font-tabular"
+                        style={{ color: 'rgba(255,255,255,0.92)' }}
+                      >
                         {formattedAmount}{' '}
-                        <span className="text-indigo-400 text-sm font-semibold">
+                        <span className="text-sm font-semibold" style={{ color: 'var(--copper)' }}>
                           {item.tokenSymbol || 'ETH'}
                         </span>
                       </p>
@@ -446,60 +542,111 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
 
                     {/* Counterparty Address */}
                     <div>
-                      <span className="text-slate-400 uppercase text-[10px] font-semibold">
+                      <span
+                        className="uppercase text-[10px] font-semibold"
+                        style={{ color: 'var(--silver-blue)' }}
+                      >
                         {isSender ? 'Recipient' : 'Sender'}
                       </span>
-                      <p className="font-mono text-slate-300 mt-0.5 truncate" title={isSender ? item.recipient : item.sender}>
-                        {isSender ? item.recipient : item.sender}
-                      </p>
+                      <div className="mt-0.5 flex items-center gap-2 min-w-0">
+                        <p
+                          className="font-mono truncate text-xs flex-1 min-w-0"
+                          style={{ color: 'rgba(143,163,199,0.8)' }}
+                          title={isSender ? item.recipient : item.sender}
+                        >
+                          {isSender ? item.recipient : item.sender}
+                        </p>
+                        <CopyButton
+                          value={isSender ? item.recipient : item.sender}
+                          label={
+                            isSender
+                              ? 'Copy recipient address'
+                              : 'Copy sender address'
+                          }
+                          className="shrink-0"
+                        />
+                      </div>
                     </div>
 
-                    {/* Live Status / Timing with countdown pulse */}
+                    {/* Live Status / Timing */}
                     <div>
-                      <span className="text-slate-400 uppercase text-[10px] font-semibold">
+                      <span
+                        className="uppercase text-[10px] font-semibold"
+                        style={{ color: 'var(--silver-blue)' }}
+                      >
                         Live Timing
                       </span>
                       <div className="mt-0.5">
                         {isPending ? (
                           isBeforeUnlock ? (
                             <div
-                              className={`text-indigo-300 font-semibold flex items-center gap-1 ${
+                              className={`font-semibold flex items-center gap-1 text-xs ${
                                 shouldPulseUnlock ? 'animate-pulse' : ''
                               }`}
+                              style={{ color: 'var(--silver-blue)' }}
                             >
-                              <Clock className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
                               Unlocks in: {unlockCountdown.formatted}
                             </div>
                           ) : isInClaimWindow ? (
                             <div
-                              className={`text-emerald-400 font-semibold flex items-center gap-1 ${
+                              className={`font-semibold flex items-center gap-1 text-xs ${
                                 shouldPulseExpiry ? 'animate-pulse' : ''
                               }`}
+                              style={{ color: 'var(--copper)' }}
                             >
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                              Claim window open (Expires: {expiryCountdown.formatted})
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ background: 'var(--copper)', animation: 'ping 1s cubic-bezier(0,0,0.2,1) infinite' }}
+                              />
+                              Open (Expires: {expiryCountdown.formatted})
                             </div>
                           ) : (
-                            <div className="text-amber-400 font-semibold flex items-center gap-1">
-                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                              Claim expired (Refundable by sender)
+                            <div
+                              className="font-semibold flex items-center gap-1 text-xs"
+                              style={{ color: 'rgba(232,116,59,0.7)' }}
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              Expired (Refundable)
                             </div>
                           )
                         ) : (
-                          <span className="text-slate-400">Terminal state</span>
+                          <span className="text-xs" style={{ color: 'rgba(143,163,199,0.5)' }}>
+                            Terminal state
+                          </span>
                         )}
                       </div>
                     </div>
                   </div>
 
                   {/* Timestamps footer */}
-                  <div className="pt-2 border-t border-slate-800/60 flex flex-wrap justify-between gap-2 text-[11px] text-slate-400 font-mono">
+                  <div
+                    className="pt-2 flex flex-wrap justify-between gap-2 text-[11px] font-mono"
+                    style={{
+                      borderTop: '1px solid rgba(143,163,199,0.08)',
+                      color: 'rgba(143,163,199,0.5)',
+                    }}
+                  >
                     <span>Unlock: {formatLocalTimestamp(unlockTs)}</span>
                     <span>Expiry: {formatLocalTimestamp(expiryTs)}</span>
                   </div>
 
                   {/* Action Buttons Row */}
                   <div className="pt-2 flex flex-wrap items-center justify-end gap-2.5">
+                    {/* Full detail (timeline, all fields, claim link) */}
+                    <Link
+                      to={`/transfers/${item.id.toString()}`}
+                      className="px-3.5 py-1.5 text-xs flex items-center gap-1.5 rounded-lg font-semibold transition"
+                      style={{
+                        color: 'rgba(143,163,199,0.8)',
+                        background: 'rgba(143,163,199,0.05)',
+                        border: '1px solid rgba(143,163,199,0.16)',
+                      }}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Details
+                    </Link>
+
                     {/* Sender Actions */}
                     {isSender && isPending && (
                       <>
@@ -509,16 +656,22 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                             type="button"
                             onClick={() => handleCancel(item.id)}
                             disabled={isActionPending || isActionWaiting}
-                            className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition disabled:opacity-50"
+                            className="btn-destructive px-3.5 py-1.5 text-xs flex items-center gap-1.5"
                           >
                             {(isActionPending || isActionWaiting) && (
                               <RefreshCw className="w-3 h-3 animate-spin" />
                             )}
+                            <Ban className="w-3.5 h-3.5" />
                             Cancel &amp; Reclaim Funds
                           </button>
                         ) : (
                           <div
-                            className="text-[11px] text-slate-500 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800"
+                            className="text-[11px] px-3 py-1.5 rounded-lg"
+                            style={{
+                              color: 'rgba(143,163,199,0.4)',
+                              background: 'rgba(10,15,30,0.5)',
+                              border: '1px solid rgba(143,163,199,0.1)',
+                            }}
                             title="Cancel is only possible before unlock time"
                           >
                             Cancel closed at unlock time
@@ -531,16 +684,21 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                             type="button"
                             onClick={() => handleRefund(item.id)}
                             disabled={isActionPending || isActionWaiting}
-                            className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition disabled:opacity-50"
+                            className="btn-primary px-3.5 py-1.5 text-xs flex items-center gap-1.5"
                           >
                             {(isActionPending || isActionWaiting) && (
                               <RefreshCw className="w-3 h-3 animate-spin" />
                             )}
-                            Claim Sender Refund
+                            Refund
                           </button>
                         ) : (
                           <div
-                            className="text-[11px] text-slate-500 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800"
+                            className="text-[11px] px-3 py-1.5 rounded-lg"
+                            style={{
+                              color: 'rgba(143,163,199,0.4)',
+                              background: 'rgba(10,15,30,0.5)',
+                              border: '1px solid rgba(143,163,199,0.1)',
+                            }}
                             title="Refund is only possible after expiry"
                           >
                             Refund opens after expiry
@@ -556,17 +714,27 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
                           <button
                             type="button"
                             onClick={() => onNavigateToClaim(item.id)}
-                            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition"
+                            className="btn-primary px-4 py-1.5 text-xs flex items-center gap-1.5"
                           >
                             <KeyRound className="w-3.5 h-3.5" />
                             Claim Now
                           </button>
                         ) : isBeforeUnlock ? (
-                          <div className="text-[11px] text-slate-500 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                          <div
+                            className="text-[11px] px-3 py-1.5 rounded-lg"
+                            style={{
+                              color: 'rgba(143,163,199,0.4)',
+                              background: 'rgba(10,15,30,0.5)',
+                              border: '1px solid rgba(143,163,199,0.1)',
+                            }}
+                          >
                             Locked until unlock time
                           </div>
                         ) : (
-                          <div className="text-[11px] text-rose-400 bg-rose-950/30 px-3 py-1.5 rounded-lg border border-rose-800/40">
+                          <div
+                            className="alert-warning text-[11px] px-3 py-1.5 inline-flex items-center gap-1"
+                          >
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
                             Expired: Claim window closed
                           </div>
                         )}
@@ -575,7 +743,7 @@ export const TransfersPage: React.FC<TransfersPageProps> = ({
 
                     {/* Non-participant viewer or terminal state */}
                     {!isPending && (
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs" style={{ color: 'rgba(143,163,199,0.4)' }}>
                         Completed · {STATE_LABELS[item.state]}
                       </span>
                     )}
