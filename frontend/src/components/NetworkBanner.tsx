@@ -31,18 +31,27 @@ export const NetworkBanner: React.FC = () => {
   return (
     <div className="flex flex-col w-full">
       {isWrongNetwork && (
-        <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-b border-amber-500/30 px-4 py-3 text-amber-200">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div
+          className="px-4 py-3 text-sm"
+          style={{
+            background: 'rgba(232,116,59,0.08)',
+            borderBottom: '1px solid rgba(232,116,59,0.25)',
+            color: 'var(--copper)',
+          }}
+        >
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+              <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: 'var(--copper)' }} />
               <span>
-                <strong>Wrong Network:</strong> Connected to <strong>{chain?.name || `Chain #${chain?.id}`}</strong>. SafeRevert is deployed on <strong>Sepolia (Chain ID 11155111)</strong>.
+                <strong>Wrong Network:</strong> Connected to{' '}
+                <strong>{chain?.name || `Chain #${chain?.id}`}</strong>. SafeRevert is deployed on{' '}
+                <strong>Sepolia (Chain ID 11155111)</strong>.
               </span>
             </div>
             <button
               onClick={() => switchChain({ chainId: TARGET_CHAIN.id })}
               disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-xs transition-colors shadow-sm disabled:opacity-50"
+              className="btn-primary inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs disabled:opacity-50"
             >
               {isPending && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
               Switch to Sepolia
@@ -52,15 +61,32 @@ export const NetworkBanner: React.FC = () => {
       )}
 
       {configIssues.length > 0 && (
-        <div className="bg-indigo-950/40 border-b border-indigo-800/40 px-4 py-2 text-indigo-300 text-xs">
+        <div
+          className="alert-info"
+          style={{ borderBottom: '1px solid rgba(143,163,199,0.14)' }}
+        >
           <div className="max-w-7xl mx-auto flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--silver-blue)' }} />
             <div>
               <strong className="block mb-0.5">Environment not fully configured:</strong>
               <ul className="list-disc ml-5 space-y-0.5">
                 {configIssues.map((issue) => (
                   <li key={issue.name}>
-                    Set <code className="bg-indigo-900/50 px-1 py-0.5 rounded font-mono">{issue.name}</code> in <code className="bg-indigo-900/50 px-1 py-0.5 rounded font-mono">frontend/.env</code> — {issue.why}.
+                    Set{' '}
+                    <code
+                      className="px-1 py-0.5 rounded font-mono text-[11px]"
+                      style={{ background: 'rgba(143,163,199,0.1)', color: 'var(--silver-blue)' }}
+                    >
+                      {issue.name}
+                    </code>{' '}
+                    in{' '}
+                    <code
+                      className="px-1 py-0.5 rounded font-mono text-[11px]"
+                      style={{ background: 'rgba(143,163,199,0.1)', color: 'var(--silver-blue)' }}
+                    >
+                      frontend/.env
+                    </code>{' '}
+                    — {issue.why}.
                   </li>
                 ))}
               </ul>
