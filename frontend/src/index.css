@@ -1,9 +1,436 @@
 @import "tailwindcss";
 @import "@rainbow-me/rainbowkit/styles.css";
 
+/* ─── Tailwind theme tokens ─────────────────────────────────────────────────
+   The three brand colors are defined ONCE in :root below; every scale step
+   here is derived from them with opacity only — no other hues exist in this
+   design system. Utilities: bg-navy · text-silver-400 · bg-copper-600 …
+
+   Contrast on navy #0A0F1E (WCAG):
+     copper-400 (accent text)  4.9:1   copper-300 (bright accent)  5.5:1
+     copper-500 / copper-600   6.4:1 / navy-on-copper-600 button  5.1:1
+     silver-400 (secondary)    5.7:1   silver-500 (muted)         5.2:1
+     silver-100 (white @ 92%)  19:1+                                   */
+@theme {
+  --color-navy: var(--navy);
+  --color-silver-blue: var(--silver-blue);
+  --color-copper: var(--copper);
+
+  /* Silver-blue scale (neutrals + secondary text) */
+  --color-silver-50: rgb(255 255 255);
+  --color-silver-100: rgb(255 255 255 / 0.92); /* primary text (white @ 92%) */
+  --color-silver-200: rgb(255 255 255 / 0.75);
+  --color-silver-300: rgb(143 163 199 / 0.95); /* light text            */
+  --color-silver-400: rgb(143 163 199 / 0.85); /* secondary text · 5.7:1 */
+  --color-silver-500: rgb(143 163 199 / 0.80); /* muted text · 5.2:1     */
+  --color-silver-600: rgb(143 163 199 / 0.55); /* strong borders / icons  */
+  --color-silver-700: rgb(143 163 199 / 0.28); /* borders                 */
+  --color-silver-800: rgb(143 163 199 / 0.16); /* card border (glass)     */
+  --color-silver-900: rgb(143 163 199 / 0.10); /* panel fill              */
+  --color-silver-950: rgb(143 163 199 / 0.06); /* glass fill              */
+
+  /* Copper scale (the single accent) */
+  --color-copper-50: rgb(232 116 59 / 0.06);
+  --color-copper-100: rgb(232 116 59 / 0.10);
+  --color-copper-200: rgb(232 116 59 / 0.18);
+  --color-copper-300: rgb(232 116 59 / 0.92); /* bright accent · 5.5:1  */
+  --color-copper-400: rgb(232 116 59 / 0.85); /* accent text · 4.9:1    */
+  --color-copper-500: rgb(232 116 59); /* base                        */
+  --color-copper-600: rgb(232 116 59 / 0.88); /* primary btn bg · 5.1:1 */
+  --color-copper-700: rgb(232 116 59 / 0.55);
+  --color-copper-800: rgb(232 116 59 / 0.30);
+  --color-copper-900: rgb(232 116 59 / 0.16);
+  --color-copper-950: rgb(232 116 59 / 0.10);
+
+  /* Typography tokens (serif display + Inter body + mono for hashes) */
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', monospace;
+
+  /* Geometry */
+  --radius-glass: 16px;
+}
+
+/* ─── Brand tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --navy:        #0A0F1E;
+  --silver-blue: #8FA3C7;
+  --copper:      #E8743B;
+
+  /* Derived semantic aliases */
+  --color-bg:          var(--navy);
+  --color-text:        rgba(255 255 255 / 0.92);
+  --color-text-muted:  var(--silver-blue);
+  --color-border:      rgba(143 163 199 / 0.16);
+  --color-accent:      var(--copper);
+
+  /* Glass card surface */
+  --glass-bg:          rgba(143 163 199 / 0.06);
+  --glass-border:      rgba(143 163 199 / 0.16);
+  --glass-blur:        blur(12px);
+  --glass-radius:      16px;
+  --glass-shadow:      0 4px 32px rgba(10 15 30 / 0.6), 0 1px 0 rgba(143 163 199 / 0.08) inset;
+
+  /* Primary-button "torch from above" light — defined ONCE, here.
+     Every copper-filled button gets it through .btn-primary (and RainbowKit's
+     navbar Connect button references the same tokens below); no component
+     copies a box-shadow. The shadow is a top-light: two inset white
+     highlights (brightest along the top edge, fading downward) plus an upward
+     copper halo — the torch beam itself is the .btn-primary::before below.
+     Brand copper #E8743B only; every other value is a white/copper opacity
+     step, so the whole effect is one hue.
+       --btn-glow-alpha   upward copper halo strength, 0–1 (hover: +0.15)
+       --btn-beam-alpha   torch-beam strength, 0–1 (hover: +0.15)
+       --btn-beam-height  beam height above the button */
+  --btn-glow-alpha: 0.5;
+  --btn-beam-alpha: 0.35;
+  --btn-beam-height: 36px;
+  --btn-glow-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    inset 0 14px 18px -12px rgb(255 255 255 / 0.25),
+    0 -12px 28px -8px rgb(232 116 59 / var(--btn-glow-alpha));
+  --btn-glow-shadow-hover:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    inset 0 14px 18px -12px rgb(255 255 255 / 0.25),
+    0 -12px 28px -8px rgb(232 116 59 / calc(var(--btn-glow-alpha) + 0.15));
+  --btn-beam:
+    linear-gradient(to bottom, rgb(232 116 59 / 0) 0%, rgb(232 116 59 / var(--btn-beam-alpha)) 100%);
+  --btn-beam-hover:
+    linear-gradient(to bottom, rgb(232 116 59 / 0) 0%, rgb(232 116 59 / calc(var(--btn-beam-alpha) + 0.15)) 100%);
+}
+
+/* ─── Base reset ────────────────────────────────────────────────────────────── */
 @layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-indigo-500 selection:text-white;
+    background-color: var(--navy);
+    color: var(--color-text);
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    min-height: 100svh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Tabular numerals for amounts */
+  .font-tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Serif headings (Fraunces via the font link in index.html) */
+  h1, h2, h3, h4, h5, h6, .font-serif, .font-display {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+  }
+
+  /* Keyboard focus: copper ring, never color-only (visible outline) */
+  :focus-visible {
+    outline: 2px solid rgb(232 116 59 / 0.7);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Monospace for addresses / hashes */
+  .font-mono, code, pre {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', monospace;
+  }
+
+  /* Selection */
+  ::selection {
+    background-color: rgba(232 116 59 / 0.3);
+    color: rgb(255 255 255 / 0.92);
+  }
+}
+
+/* ─── Glass card utility ────────────────────────────────────────────────────── */
+@layer components {
+  .glass-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+  }
+
+  /* Solid fallback when backdrop-filter is unsupported */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-card {
+      background: rgba(20 27 48 / 0.95);
+    }
+  }
+
+  /* Primary button: solid copper bg, navy text + the shared torch-from-above
+     light (inset top highlight, upward halo, and the beam pseudo below).
+     This class is the ONLY place the effect is applied to app buttons. */
+  .btn-primary {
+    background-color: var(--copper);
+    color: var(--navy);
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    border-radius: 12px;
+    /* position:relative anchors the beam. Deliberately NO isolation, filter
+       or transform on hover: the ::before below relies on z-index:-1
+       escaping this element (z-index:auto → no stacking context) so the beam
+       renders behind neighbouring buttons and labels, never over them. */
+    position: relative;
+    box-shadow: var(--btn-glow-shadow);
+    transition: background-color 0.18s ease, opacity 0.18s ease,
+      transform 0.1s ease, box-shadow 0.18s ease; /* → 0.01ms under prefers-reduced-motion */
+  }
+  .btn-primary:hover:not(:disabled) {
+    /* White-mixed copper instead of filter:brightness — a filter would turn
+       this button into a stacking context and trap the beam on top of its
+       neighbours while hovered. */
+    background-color: color-mix(in srgb, var(--copper) 90%, white);
+    box-shadow: var(--btn-glow-shadow-hover); /* halo +0.15 */
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.985);
+  }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none; /* disabled: no glow (and no beam, cut off below) */
+  }
+
+  /* Secondary button: transparent, silver-blue border */
+  .btn-secondary {
+    background-color: transparent;
+    color: var(--silver-blue);
+    border: 1px solid rgba(143 163 199 / 0.4);
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    border-radius: 12px;
+    transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: rgba(143 163 199 / 0.7);
+    color: rgba(255 255 255 / 0.92);
+    background-color: rgba(143 163 199 / 0.06);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Destructive / Cancel button: copper outline */
+  .btn-destructive {
+    background-color: transparent;
+    color: var(--copper);
+    border: 1px solid rgba(232 116 59 / 0.5);
+    font-weight: 700;
+    border-radius: 12px;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .btn-destructive:hover:not(:disabled) {
+    background-color: rgba(232 116 59 / 0.1);
+    border-color: rgba(232 116 59 / 0.75);
+  }
+  .btn-destructive:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ── Status badges ─────────────────────────── */
+  /* Pending: silver-blue outline */
+  .badge-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--silver-blue);
+    border: 1px solid rgba(143 163 199 / 0.4);
+    background: transparent;
+  }
+
+  /* Claimable: copper filled */
+  .badge-claimable {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy);
+    background-color: var(--copper);
+    border: 1px solid var(--copper);
+  }
+
+  /* Claimed: silver-blue filled */
+  .badge-claimed {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--navy);
+    background-color: var(--silver-blue);
+    border: 1px solid var(--silver-blue);
+  }
+
+  /* Cancelled / Refunded: silver-blue at 50% opacity */
+  .badge-cancelled, .badge-refunded {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(143 163 199 / 0.6);
+    border: 1px solid rgba(143 163 199 / 0.25);
+    background: transparent;
+  }
+
+  /* Warning/Error: copper with icon */
+  .alert-warning {
+    background-color: rgba(232 116 59 / 0.08);
+    border: 1px solid rgba(232 116 59 / 0.3);
+    color: var(--copper);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 12px;
+  }
+
+  /* Info banner (config issues) */
+  .alert-info {
+    background-color: rgba(143 163 199 / 0.06);
+    border-bottom: 1px solid rgba(143 163 199 / 0.16);
+    color: var(--silver-blue);
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+
+  /* Form input base */
+  .sr-input {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: rgba(10 15 30 / 0.6);
+    border: 1px solid rgba(143 163 199 / 0.16);
+    color: rgba(255 255 255 / 0.92);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    outline: none;
+  }
+  .sr-input::placeholder {
+    color: rgba(143 163 199 / 0.4);
+  }
+  .sr-input:focus {
+    border-color: rgba(232 116 59 / 0.5);
+    box-shadow: 0 0 0 3px rgba(232 116 59 / 0.12);
+  }
+  .sr-input.error {
+    border-color: rgba(232 116 59 / 0.6);
+    box-shadow: 0 0 0 3px rgba(232 116 59 / 0.1);
+  }
+  .sr-input.font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  /* Page/nav background */
+  .sr-bg {
+    background-color: var(--navy);
+    color: var(--color-text);
+    /* Own stacking context: the decorative z-index:-1 beams and hero glow
+       escape to here and paint ABOVE this fill (a negative-z child renders
+       over its stacking-context root's background) instead of hiding
+       behind it, while still staying under every piece of content. */
+    isolation: isolate;
+  }
+}
+
+/* ─── Torch beam + RainbowKit navbar Connect button ──────────────────────────
+   One definition for every copper-filled button. Third-party markup cannot
+   carry .btn-primary, so RainbowKit's disconnected-state "Connect Wallet"
+   button (copper via the theme accentColor #E8743B) joins the same two
+   rules — same tokens, no copied styles. Kept unlayered so both win over
+   RainbowKit's own stylesheet. */
+[data-rk] .ju367v9i {
+  position: relative; /* anchors its beam */
+  box-shadow: var(--btn-glow-shadow);
+}
+[data-rk] .ju367v9i:hover {
+  box-shadow: var(--btn-glow-shadow-hover);
+}
+[data-rk] .ju367v9i:disabled {
+  box-shadow: none;
+}
+
+/* Torch beam: a narrow trapezoid widening upward, sitting above the button.
+   z-index:-1 escapes .btn-primary (position:relative, z-index:auto) to the
+   nearest stacking context — .sr-bg, glass cards, the navbar — so the beam
+   always paints BEHIND neighbouring buttons and page content (never over
+   them) while still showing above page/card fills. The gradient is
+   transparent at the top and strongest at the button edge, so it fades out
+   before it reaches anything above it; pointer-events:none keeps clicks
+   passing through. Height and strength come from the tokens in :root. */
+.btn-primary::before,
+[data-rk] .ju367v9i::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: var(--btn-beam-height);
+  background: var(--btn-beam);
+  clip-path: polygon(30% 100%, 70% 100%, 100% 0, 0 0);
+  filter: blur(6px);
+  pointer-events: none;
+  z-index: -1;
+}
+.btn-primary:hover:not(:disabled)::before,
+[data-rk] .ju367v9i:hover::before {
+  background: var(--btn-beam-hover); /* beam +0.15 */
+}
+.btn-primary:disabled::before,
+[data-rk] .ju367v9i:disabled::before {
+  content: none; /* disabled: no beam */
+}
+
+/* ─── Torch cone for the Home hero ─────────────────────────────────────────── */
+/* A downward cone of copper light from the top centre of the hero, behind the
+   headline: 30% at the top, transparent by 60% down the section (the fade's
+   60% stop sits at 60% of the section height). The conic mask carves the
+   cone — narrow at the top centre, widening as it falls — with soft edges,
+   and degrades to a plain vertical fade where masks are unsupported.
+   Decorative only. Contrast where the headline actually sits (glow ≈
+   0.07–0.21 copper over navy): silver-100 (white @92%) ≥ 12:1 and the copper
+   accent span ≥ 4.8:1; even at the full 0.30 top edge, white stays ≈ 10:1. */
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* behind the badge/headline copy, above the page fill */
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgb(232 116 59 / 0.3) 0%,
+    rgb(232 116 59 / 0.12) 35%,
+    rgb(232 116 59 / 0) 60%
+  );
+  /* Wedge centred on straight-down (180deg), ramping out to ±25deg */
+  -webkit-mask-image: conic-gradient(from 155deg at 50% 0%, transparent 0deg, #000 14deg, #000 36deg, transparent 50deg);
+  mask-image: conic-gradient(from 155deg at 50% 0%, transparent 0deg, #000 14deg, #000 36deg, transparent 50deg);
+}
+
+/* ─── Reduced motion ────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
